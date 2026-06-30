@@ -2,6 +2,7 @@ mod citizen;
 mod identity;
 mod models;
 mod officer;
+mod admin;
 
 use axum::{routing::get, Router};
 use sqlx::postgres::PgPoolOptions;
@@ -16,7 +17,7 @@ use tower_http::trace::TraceLayer;
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub gateway_secret: String,
-    
+
     pub expected_role: String, // Which role this running instance serves, for easy access (citizen, officer, admin).
 }
 
@@ -53,17 +54,12 @@ async fn main() {
         expected_role: service_role.clone(),
     };
 
-    // TODO: Uncomment this when the rest of the handlers are implemented
-    // The role passed in env selects which route table this instance exposes when ran.
-    // let role_routes = match service_role.as_str() {
-    //     "citizen" => citizen::router(),
-    //     "officer" => officer::router(),
-    //     "admin" => admin::router(),
-    //     _ => unreachable!("validated above"), // Required by rust comp as all cases need handling.
-    // };
-
-    // TODO: comment this when the rest of the handlers are implemented above
-    let role_routes = citizen::router();
+    let role_routes = match service_role.as_str() {
+        "citizen" => citizen::router(),
+        "officer" => officer::router(),
+        "admin" => admin::router(),
+        _ => unreachable!("validated above"), // Required by rust comp as all cases need handling.
+    };
 
     let health_role = service_role.clone();
     let app = Router::new() // TODO: Break Down layers.

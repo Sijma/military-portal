@@ -1,6 +1,7 @@
 mod citizen;
 mod identity;
 mod models;
+mod officer;
 
 use axum::{routing::get, Router};
 use sqlx::postgres::PgPoolOptions;

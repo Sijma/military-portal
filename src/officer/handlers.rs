@@ -1,0 +1,136 @@
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
+use serde::Deserialize;
+
+use crate::{identity::Identity, models::Application, AppState};
+
+#[derive(Debug, Deserialize)]
+pub struct ReviewDecision {
+    /// Must be "approved" or "rejected"
+    pub decision: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ListFilter {
+    pub status: Option<String>,
+}
+
+/// Officers can see all applications (optionally filtered by status).
+/// The officer_app_user DB grant gives plain SELECT on the whole table, no row filter needed here.
+pub async fn list_applications(
+    State(state): State<AppState>,
+    _identity: Identity,
+    Query(filter): Query<ListFilter>,
+) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
+    let rows = match filter.status {
+        Some(status) => {
+            sqlx::query_as::<_, Application>(
+                r#"
+                SELECT applicant_ssn, applicant_id, applicant_email, application_type,
+                       deferment_reason, service_division, status,
+                       reviewed_by, review_note, created_at, updated_at
+                FROM applications
+                WHERE status = $1
+                ORDER BY created_at ASC
+                "#,
+            )
+            .bind(status)
+            .fetch_all(&state.db)
+            .await
+        }
+        None => {
+            sqlx::query_as::<_, Application>(
+                r#"
+                SELECT applicant_ssn, applicant_id, applicant_email, application_type,
+                       deferment_reason, service_division, status,
+                       reviewed_by, review_note, created_at, updated_at
+                FROM applications
+                ORDER BY created_at ASC
+                "#,
+            )
+            .fetch_all(&state.db)
+            .await
+        }
+    }
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(rows))
+}
+
+/// Get application by SSN, passed in request path argument.
+pub async fn get_application(
+    State(state): State<AppState>,
+    _identity: Identity,
+    Path(ssn): Path<String>,
+) -> Result<Json<Application>, (StatusCode, String)> {
+    let row = sqlx::query_as::<_, Application>(
+        r#"
+        SELECT applicant_ssn, applicant_id, applicant_email, application_type,
+               deferment_reason, service_division, status,
+               reviewed_by, review_note, created_at, updated_at
+        FROM applications
+        WHERE applicant_ssn = $1
+        "#,
+    )
+    .bind(ssn)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    row.map(Json)
+        .ok_or((StatusCode::NOT_FOUND, "application not found".into()))
+}
+
+/// Approve or reject a pending application.
+/// The officer_app_user DB grant only permits UPDATE on status, reviewed_by and review_note
+/// so: deferment_reason, service_division and application_type are all immutable from this point on
+pub async fn review_application(
+    State(state): State<AppState>,
+    identity: Identity,
+    Path(ssn): Path<String>,
+    Json(payload): Json<ReviewDecision>,
+) -> Result<Json<Application>, (StatusCode, String)> {
+    if payload.decision != "approved" && payload.decision != "rejected" {
+        return Err((StatusCode::BAD_REQUEST, "decision must be 'approved' or 'rejected'".into()));
+    }
+
+    let existing_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM applications WHERE applicant_ssn = $1")
+            .bind(&ssn)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let existing_status = existing_status.ok_or((StatusCode::NOT_FOUND, "application not found".into()))?;
+
+    if existing_status != "pending" {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("application already {}; cannot re-review", existing_status),
+        ));
+    }
+
+    let row = sqlx::query_as::<_, Application>(
+        r#"
+        UPDATE applications
+        SET status = $1, reviewed_by = $2, review_note = $3
+        WHERE applicant_ssn = $4
+        RETURNING applicant_ssn, applicant_id, applicant_email, application_type,
+                  deferment_reason, service_division, status,
+                  reviewed_by, review_note, created_at, updated_at
+        "#,
+    )
+    .bind(&payload.decision)
+    .bind(&identity.user_id)
+    .bind(&payload.note)
+    .bind(&ssn)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(row))
+}

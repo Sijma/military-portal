@@ -892,7 +892,6 @@ dependencies = [
  "serde",
  "sqlx",
  "tokio",
- "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",

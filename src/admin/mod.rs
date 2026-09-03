@@ -11,7 +11,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/applications", get(handlers::list_applications))
         .route(
-            "/applications/:ssn",
+            "/applications/{ssn}",
             put(handlers::update_application).delete(handlers::delete_application)
         )
 }

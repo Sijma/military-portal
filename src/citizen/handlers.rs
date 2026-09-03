@@ -5,7 +5,7 @@ use crate::{identity::Identity, models::Application, AppState};
 
 /// Defines how the incoming request JSON Payload will be parsed and validated.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "application_type")] // TODO: May not find the variant names without 'snake_case'
+#[serde(tag = "application_type", rename_all = "snake_case")] // TODO: May not find the variant names without 'snake_case'
 pub enum CreateApplication {
     Deferment { reason: String }, // If deferment = reason string required
     Service { division: String }, // If service = division string required

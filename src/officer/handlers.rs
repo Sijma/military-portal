@@ -19,8 +19,7 @@ pub struct ListFilter {
     pub status: Option<String>,
 }
 
-/// Officers can see all applications (optionally filtered by status).
-/// The officer_app_user DB grant gives plain SELECT on the whole table, no row filter needed here.
+/// Officers can see all applications, optionally filtered by status.
 pub async fn list_applications(
     State(state): State<AppState>,
     _identity: Identity,
@@ -85,9 +84,8 @@ pub async fn get_application(
         .ok_or((StatusCode::NOT_FOUND, "application not found".into()))
 }
 
-/// Approve or reject a pending application.
-/// The officer_app_user DB grant only permits UPDATE on status, reviewed_by and review_note
-/// so: deferment_reason, service_division and application_type are all immutable from this point on
+/// Approve or reject a pending application. The fixed query only updates the
+/// status, reviewer and review note.
 pub async fn review_application(
     State(state): State<AppState>,
     identity: Identity,

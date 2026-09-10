@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-const VALID_STATUSES: [&str; 4] = ["pending", "approved", "rejected", "withdrawn"];
+const VALID_STATUSES: [&str; 3] = ["pending", "approved", "rejected"];
 
 /// Admin can override status/review_note to correct potential accidents.
 /// Admin CANNOT rewrite application_type, deferment_reason, or service_division, as those

@@ -24,5 +24,4 @@ pub struct Application {
     pub reviewed_by: Option<String>,
     pub review_note: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }

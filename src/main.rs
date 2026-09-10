@@ -1,4 +1,5 @@
 mod citizen;
+mod email;
 mod identity;
 mod models;
 mod officer;
@@ -14,6 +15,7 @@ use tower_http::trace::TraceLayer;
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
+    pub email: email::EmailService,
     pub expected_role: String,
 }
 
@@ -38,9 +40,11 @@ async fn main() {
         .connect(&database_url)
         .await
         .expect("failed to connect to postgres");
+    let email = email::EmailService::from_env().expect("failed to configure email");
 
     let state = AppState {
         db,
+        email,
         expected_role: service_role.clone(),
     };
 

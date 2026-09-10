@@ -24,7 +24,7 @@ pub async fn get_application(
         r#"
         SELECT applicant_amka, applicant_id, applicant_email, application_type,
                deferment_reason, service_division, status,
-               NULL::text AS reviewed_by, review_note, created_at, updated_at
+               NULL::text AS reviewed_by, review_note, created_at
         FROM applications
         WHERE applicant_amka = $1
         "#,
@@ -97,7 +97,7 @@ pub async fn create_application(
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING applicant_amka, applicant_id, applicant_email, application_type,
                   deferment_reason, service_division, status,
-                  NULL::text AS reviewed_by, review_note, created_at, updated_at
+                  NULL::text AS reviewed_by, review_note, created_at
         "#,
     )
     .bind(&identity.amka)

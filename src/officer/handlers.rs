@@ -31,7 +31,7 @@ pub async fn list_applications(
                 r#"
                 SELECT applicant_amka, applicant_id, applicant_email, application_type,
                        deferment_reason, service_division, status,
-                       reviewed_by, review_note, created_at, updated_at
+                       reviewed_by, review_note, created_at
                 FROM applications
                 WHERE status = $1
                 ORDER BY created_at ASC
@@ -46,7 +46,7 @@ pub async fn list_applications(
                 r#"
                 SELECT applicant_amka, applicant_id, applicant_email, application_type,
                        deferment_reason, service_division, status,
-                       reviewed_by, review_note, created_at, updated_at
+                       reviewed_by, review_note, created_at
                 FROM applications
                 ORDER BY created_at ASC
                 "#,
@@ -70,7 +70,7 @@ pub async fn get_application(
         r#"
         SELECT applicant_amka, applicant_id, applicant_email, application_type,
                deferment_reason, service_division, status,
-               reviewed_by, review_note, created_at, updated_at
+               reviewed_by, review_note, created_at
         FROM applications
         WHERE applicant_amka = $1
         "#,
@@ -106,7 +106,7 @@ pub async fn review_application(
         WHERE applicant_amka = $4 AND status = 'pending'
         RETURNING applicant_amka, applicant_id, applicant_email, application_type,
                   deferment_reason, service_division, status,
-                  reviewed_by, review_note, created_at, updated_at
+                  reviewed_by, review_note, created_at
         "#,
     )
     .bind(&payload.decision)
@@ -118,6 +118,17 @@ pub async fn review_application(
     .map_err(crate::models::internal_error)?;
 
     if let Some(row) = row {
+        if let Err(error) = state
+            .email
+            .send_status_change(
+                &row.applicant_email,
+                &row.status,
+                row.review_note.as_deref(),
+            )
+            .await
+        {
+            tracing::error!(%error, applicant_amka = %row.applicant_amka, "status email failed");
+        }
         return Ok(Json(row));
     }
 

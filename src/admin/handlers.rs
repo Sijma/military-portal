@@ -26,7 +26,7 @@ pub async fn list_applications(
         r#"
         SELECT applicant_amka, applicant_id, applicant_email, application_type,
                deferment_reason, service_division, status,
-               reviewed_by, review_note, created_at, updated_at
+               reviewed_by, review_note, created_at
         FROM applications
         ORDER BY created_at DESC
         "#,
@@ -51,16 +51,19 @@ pub async fn update_application(
         }
     }
 
-    let exists: Option<String> =
-        sqlx::query_scalar("SELECT applicant_amka FROM applications WHERE applicant_amka = $1")
+    let existing_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM applications WHERE applicant_amka = $1")
             .bind(&amka)
             .fetch_optional(&state.db)
             .await
             .map_err(crate::models::internal_error)?;
 
-    if exists.is_none() {
-        return Err((StatusCode::NOT_FOUND, "application not found".into()));
-    }
+    let existing_status =
+        existing_status.ok_or((StatusCode::NOT_FOUND, "application not found".into()))?;
+    let status_changed = payload
+        .status
+        .as_deref()
+        .is_some_and(|status| status != existing_status);
 
     let row = sqlx::query_as::<_, Application>(
         r#"
@@ -71,7 +74,7 @@ pub async fn update_application(
         WHERE applicant_amka = $4
         RETURNING applicant_amka, applicant_id, applicant_email, application_type,
                   deferment_reason, service_division, status,
-                  reviewed_by, review_note, created_at, updated_at
+                  reviewed_by, review_note, created_at
         "#,
     )
     .bind(&payload.status)
@@ -81,6 +84,20 @@ pub async fn update_application(
     .fetch_one(&state.db)
     .await
     .map_err(crate::models::internal_error)?;
+
+    if status_changed {
+        if let Err(error) = state
+            .email
+            .send_status_change(
+                &row.applicant_email,
+                &row.status,
+                row.review_note.as_deref(),
+            )
+            .await
+        {
+            tracing::error!(%error, applicant_amka = %row.applicant_amka, "status email failed");
+        }
+    }
 
     Ok(Json(row))
 }

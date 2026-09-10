@@ -61,6 +61,6 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|e| panic!("failed to bind {bind_addr}: {e}"));
-    tracing::info!("civic-backend (role={service_role}) listening on {bind_addr}");
+    tracing::info!("military-backend (role={service_role}) listening on {bind_addr}");
     axum::serve(listener, app).await.unwrap();
 }

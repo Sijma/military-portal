@@ -14,7 +14,7 @@ use tower_http::trace::TraceLayer;
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
-    pub expected_role: String, // citizen | officer | admin — which role this instance serves
+    pub expected_role: String,
 }
 
 #[tokio::main]

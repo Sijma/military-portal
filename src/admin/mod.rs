@@ -1,6 +1,6 @@
 use axum::{
-    routing::{get, put},
     Router,
+    routing::{get, put},
 };
 
 use crate::AppState;
@@ -11,7 +11,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/applications", get(handlers::list_applications))
         .route(
-            "/applications/{ssn}",
-            put(handlers::update_application).delete(handlers::delete_application)
+            "/applications/{amka}",
+            put(handlers::update_application).delete(handlers::delete_application),
         )
 }

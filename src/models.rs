@@ -1,13 +1,19 @@
+use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-/// Shared model for all 3 roles. The version each gets is projected by the query
-/// `applicant_ssn` is the table's primary key since a citizen has at most one application
-/// `application_type` decides which of `deferment_reason` or `service_division` is populated
-/// exactly one of the two can be non-null per row, enforced by a CHECK constraint at the database level (application_type_shape).
+pub fn internal_error(e: sqlx::Error) -> (StatusCode, String) {
+    tracing::error!(error = %e, "database error");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal server error".to_string(),
+    )
+}
+
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Application {
-    pub applicant_ssn: String,
+    pub applicant_amka: String,
     pub applicant_id: String,
     pub applicant_email: String,
     pub application_type: String,

@@ -44,6 +44,7 @@ pipeline {
           credentialId: 'github-pet',
           repository: env.REPO,
           tag: env.TAG_NAME,
+          commitish: env.GIT_COMMIT,
           name: "Release ${env.TAG_NAME}",
           bodyText: "Automated release build for ${env.TAG_NAME}."
         )

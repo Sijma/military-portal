@@ -5,28 +5,22 @@ pipeline {
     CARGO_BIN  = 'military-portal'
     BINARY_NAME = 'military-portal-linux-x86_64'
     REPO = 'Sijma/military-portal'
-    GH_TOKEN = credentials('github-pet')
-    CACHE_DIR = '/var/lib/jenkins/cache/rust'
   }
   stages {
     stage('Test and build') {
+      agent {
+        docker {
+          image 'rust:1.98.0-alpine'
+          reuseNode true
+          args '-v /var/lib/jenkins/cache/rust/registry:/cargo ' +
+               '-v /var/lib/jenkins/cache/rust/target:/target ' +
+               '-e CARGO_HOME=/cargo -e CARGO_TARGET_DIR=/target'
+        }
+      }
       steps {
-        sh '''
-          set -eu
-          mkdir -p "$CACHE_DIR/registry" "$CACHE_DIR/target"
-          docker run --rm \
-            -v "$WORKSPACE":/w -w /w \
-            -v "$CACHE_DIR/registry":/cargo \
-            -v "$CACHE_DIR/target":/target \
-            -e CARGO_HOME=/cargo \
-            -e CARGO_TARGET_DIR=/target \
-            -u "$(id -u):$(id -g)" \
-            rust:1.98.0-alpine \
-            sh -c 'cargo test --release --locked && cargo build --release --locked'
-          mkdir -p dist
-          cp "$CACHE_DIR/target/release/$CARGO_BIN" "dist/$BINARY_NAME"
-          test -x "dist/$BINARY_NAME"
-        '''
+        sh 'cargo test --release --locked'
+        sh 'cargo build --release --locked'
+        sh 'mkdir -p dist && cp /target/release/$CARGO_BIN dist/$BINARY_NAME'
       }
     }
 
@@ -35,13 +29,15 @@ pipeline {
           buildingTag()
       }
       steps {
-        sh '''
-          set -eu
-          echo "$GH_TOKEN" | docker login ghcr.io -u sijma --password-stdin
-          docker build -t "$IMAGE:$TAG_NAME" -t "$IMAGE:latest" .
-          docker push "$IMAGE:$TAG_NAME"
-          docker push "$IMAGE:latest"
-        '''
+        withCredentials([string(credentialsId: 'github-pet', variable: 'REG_TOKEN')]) {
+          sh '''
+            set -eu
+            echo "$REG_TOKEN" | docker login ghcr.io -u sijma --password-stdin
+            docker build -t "$IMAGE:$TAG_NAME" -t "$IMAGE:latest" .
+            docker push "$IMAGE:$TAG_NAME"
+            docker push "$IMAGE:latest"
+          '''
+        }
       }
     }
 

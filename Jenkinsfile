@@ -6,16 +6,27 @@ pipeline {
     BINARY_NAME = 'military-portal-linux-x86_64'
     REPO = 'Sijma/military-portal'
     TOKEN = credentials('github-pet')
+    CACHE_DIR = '/var/lib/jenkins/cache/rust'
   }
   stages {
-    stage('Build') {
-      agent { docker { image 'rust:1.98.0-alpine'; reuseNode true } }
-      environment {
-        CARGO_HOME = "${WORKSPACE}/.cargo"
-      }
+    stage('Test and build') {
       steps {
-        sh 'cargo build --release --locked'
-        sh 'test -x target/release/$CARGO_BIN'
+        sh '''
+          set -eu
+          mkdir -p "$CACHE_DIR/registry" "$CACHE_DIR/target"
+          docker run --rm \
+            -v "$WORKSPACE":/w -w /w \
+            -v "$CACHE_DIR/registry":/cargo \
+            -v "$CACHE_DIR/target":/target \
+            -e CARGO_HOME=/cargo \
+            -e CARGO_TARGET_DIR=/target \
+            -u "$(id -u):$(id -g)" \
+            rust:1.98.0-alpine \
+            sh -c 'cargo test --release --locked && cargo build --release --locked'
+          mkdir -p target/release
+          cp "$CACHE_DIR/target/release/$CARGO_BIN" "target/release/$CARGO_BIN"
+          test -x "target/release/$CARGO_BIN"
+        '''
       }
     }
 

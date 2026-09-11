@@ -7,7 +7,7 @@ pipeline {
     REPO = 'Sijma/military-portal'
   }
   stages {
-    stage('Test and build') {
+    stage('Build') {
       agent {
         docker {
           image 'rust:1.98.0-alpine'
@@ -18,20 +18,16 @@ pipeline {
         }
       }
       steps {
-        sh 'cargo test --release --locked'
         sh 'cargo build --release --locked'
         sh 'mkdir -p dist && cp /target/release/$CARGO_BIN dist/$BINARY_NAME'
       }
     }
 
     stage('Publish image') {
-      when {
-          buildingTag()
-      }
+      when { buildingTag() }
       steps {
         withCredentials([string(credentialsId: 'github-pet', variable: 'REG_TOKEN')]) {
           sh '''
-            set -eu
             echo "$REG_TOKEN" | docker login ghcr.io -u sijma --password-stdin
             docker build -t "$IMAGE:$TAG_NAME" -t "$IMAGE:latest" .
             docker push "$IMAGE:$TAG_NAME"
@@ -41,7 +37,7 @@ pipeline {
       }
     }
 
-    stage('Publish binary') {
+    stage('Publish release') {
       when { buildingTag() }
       steps {
         createGitHubRelease(

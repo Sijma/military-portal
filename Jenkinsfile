@@ -26,7 +26,7 @@ pipeline {
       steps {
         sh '''
           set -eu
-          echo "$GH_TOKEN" | docker login ghcr.io -u sijma --password-stdin
+          echo "$TOKEN" | docker login ghcr.io -u sijma --password-stdin
           docker build -t "$IMAGE:$TAG_NAME" -t "$IMAGE:latest" .
           docker push "$IMAGE:$TAG_NAME"
           docker push "$IMAGE:latest"
@@ -37,14 +37,17 @@ pipeline {
     stage('Publish binary') {
       when { buildingTag() }
       steps {
-        sh '''
-          set -eu
-          gh release create "$TAG_NAME" \
-             "./target/release/$CARGO_BIN#$ASSET_NAME" \
+        withEnv(["GH_TOKEN=${TOKEN}"]) {
+          sh '''
+            set -eu
+            command -v gh > /dev/null || { echo "gh CLI is not installed on this agent"; exit 1; }
+            gh release create "$TAG_NAME" \
+             "./target/release/$CARGO_BIN#$BINARY_NAME" \
              --repo "$REPO" \
              --title "Release $TAG_NAME" \
              --notes "Automated release build for $TAG_NAME"
-        '''
+          '''
+        }
       }
     }
   }

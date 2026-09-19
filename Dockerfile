@@ -13,4 +13,4 @@ FROM alpine:3.24
 LABEL org.opencontainers.image.source=https://github.com/Sijma/military-portal
 WORKDIR /app
 COPY --from=builder /military-portal /app/military-portal
-CMD ["/app/military-portal"]
+ENTRYPOINT ["/app/military-portal"]

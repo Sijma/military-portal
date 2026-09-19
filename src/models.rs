@@ -10,7 +10,6 @@ pub fn internal_error(e: sqlx::Error) -> (StatusCode, String) {
     )
 }
 
-
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Application {
     pub applicant_amka: String,

@@ -1,17 +1,65 @@
+mod admin;
 mod citizen;
 mod email;
 mod identity;
 mod models;
 mod officer;
-mod admin;
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use sqlx::postgres::PgPoolOptions;
-use std::env;
+use std::{env, process};
 use tower_http::trace::TraceLayer;
 
-/// Shared app state. Deployment-agnostic. Everything comes from env vars set by whichever deploy
-/// target is running this binary.
+const USAGE: &str =
+    "Usage: military-portal --service-role <citizen|officer|admin> --bind-addr <address>";
+
+struct CliArgs {
+    service_role: String,
+    bind_addr: String,
+}
+
+impl CliArgs {
+    fn parse() -> Self {
+        let mut service_role = None;
+        let mut bind_addr = None;
+        let mut args = env::args().skip(1);
+
+        while let Some(arg) = args.next() {
+            if matches!(arg.as_str(), "-h" | "--help") {
+                println!("{USAGE}");
+                process::exit(0);
+            }
+
+            let value = args
+                .next()
+                .unwrap_or_else(|| cli_error(&format!("missing value for {arg}")));
+            match arg.as_str() {
+                "--service-role" => service_role = Some(value),
+                "--bind-addr" => bind_addr = Some(value),
+                _ => cli_error(&format!("unknown argument: {arg}")),
+            }
+        }
+
+        let service_role = service_role.unwrap_or_else(|| cli_error("--service-role is required"));
+        if !["citizen", "officer", "admin"].contains(&service_role.as_str()) {
+            cli_error(&format!(
+                "--service-role must be one of: citizen, officer, admin (got '{service_role}')"
+            ));
+        }
+
+        Self {
+            service_role,
+            bind_addr: bind_addr.unwrap_or_else(|| cli_error("--bind-addr is required")),
+        }
+    }
+}
+
+fn cli_error(message: &str) -> ! {
+    eprintln!("error: {message}\n\n{USAGE}");
+    process::exit(2);
+}
+
+/// Shared app state. Deployment-agnostic configuration comes from the CLI and environment.
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
@@ -26,14 +74,11 @@ async fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let service_role = env::var("SERVICE_ROLE")
-        .expect("SERVICE_ROLE must be set to one of: citizen, officer, admin");
+    let CliArgs {
+        service_role,
+        bind_addr,
+    } = CliArgs::parse();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let bind_addr = env::var("BIND_ADDR").expect("BIND_ADDR must be set, e.g. 0.0.0.0:8080");
-
-    if !["citizen", "officer", "admin"].contains(&service_role.as_str()) {
-        panic!("SERVICE_ROLE must be one of: citizen, officer, admin (got '{service_role}')");
-    }
 
     let db = PgPoolOptions::new()
         .max_connections(10)
@@ -57,7 +102,10 @@ async fn main() {
 
     let health_role = service_role.clone();
     let app = Router::new()
-        .route("/health", get(move || async move { format!("{health_role}-service ok") }))
+        .route(
+            "/health",
+            get(move || async move { format!("{health_role}-service ok") }),
+        )
         .merge(role_routes)
         .layer(TraceLayer::new_for_http())
         .with_state(state);

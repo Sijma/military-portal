@@ -7,21 +7,23 @@ mod officer;
 
 use axum::{Router, routing::get};
 use sqlx::postgres::PgPoolOptions;
-use std::{env, process};
+use std::{env, net::IpAddr, net::SocketAddr, process};
 use tower_http::trace::TraceLayer;
 
-const USAGE: &str =
-    "Usage: military-portal --service-role <citizen|officer|admin> --bind-addr <address>";
+const SERVICE_ROLES: [&str; 3] = ["citizen", "officer", "admin"];
+const USAGE: &str = "Usage: military-portal \
+    --service-instance <citizen|officer|admin>:<port> \
+    --bind-host <IP address>";
 
 struct CliArgs {
     service_role: String,
-    bind_addr: String,
+    bind_addr: SocketAddr,
 }
 
 impl CliArgs {
     fn parse() -> Self {
-        let mut service_role = None;
-        let mut bind_addr = None;
+        let mut service_instance = None;
+        let mut bind_host = None;
         let mut args = env::args().skip(1);
 
         while let Some(arg) = args.next() {
@@ -34,24 +36,49 @@ impl CliArgs {
                 .next()
                 .unwrap_or_else(|| cli_error(&format!("missing value for {arg}")));
             match arg.as_str() {
-                "--service-role" => service_role = Some(value),
-                "--bind-addr" => bind_addr = Some(value),
+                "--service-instance" => service_instance = Some(value),
+                "--bind-host" => bind_host = Some(value),
                 _ => cli_error(&format!("unknown argument: {arg}")),
             }
         }
 
-        let service_role = service_role.unwrap_or_else(|| cli_error("--service-role is required"));
-        if !["citizen", "officer", "admin"].contains(&service_role.as_str()) {
-            cli_error(&format!(
-                "--service-role must be one of: citizen, officer, admin (got '{service_role}')"
-            ));
-        }
+        let service_instance =
+            service_instance.unwrap_or_else(|| cli_error("--service-instance is required"));
+        let (service_role, port) =
+            parse_service_instance(&service_instance).unwrap_or_else(|message| cli_error(&message));
+
+        let bind_host = bind_host.unwrap_or_else(|| cli_error("--bind-host is required"));
+        let bind_host = bind_host
+            .parse::<IpAddr>()
+            .unwrap_or_else(|_| cli_error("--bind-host must be an IPv4 or IPv6 address"));
 
         Self {
             service_role,
-            bind_addr: bind_addr.unwrap_or_else(|| cli_error("--bind-addr is required")),
+            bind_addr: SocketAddr::new(bind_host, port),
         }
     }
+}
+
+fn parse_service_instance(value: &str) -> Result<(String, u16), String> {
+    let (role, port) = value
+        .rsplit_once(':')
+        .ok_or_else(|| "--service-instance must have the form <role>:<port>".to_string())?;
+
+    if !SERVICE_ROLES.contains(&role) {
+        return Err(format!(
+            "service role must be one of: {} (got '{role}')",
+            SERVICE_ROLES.join(", ")
+        ));
+    }
+
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| format!("service port must be an integer from 1 to 65535 (got '{port}')"))?;
+    if port == 0 {
+        return Err("service port must be an integer from 1 to 65535 (got '0')".to_string());
+    }
+
+    Ok((role.to_string(), port))
 }
 
 fn cli_error(message: &str) -> ! {
